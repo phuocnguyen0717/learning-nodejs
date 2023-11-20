@@ -57,6 +57,7 @@ class Product {
         console.log(err);
       });
   }
+
   static deleteId(prodId) {
     const db = getDb();
     return db
