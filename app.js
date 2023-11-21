@@ -28,6 +28,7 @@ app.use((req, res, next) => {
       console.log(err);
     });
 });
+
 app.use("/admin", adminData);
 app.use(shopRoutes);
 
