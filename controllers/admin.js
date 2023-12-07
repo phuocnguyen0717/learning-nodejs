@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+const { validationResult } = require("express-validator");
 const Product = require("../models/products");
 
 exports.getAddProduct = (req, res, next) => {
@@ -5,6 +7,9 @@ exports.getAddProduct = (req, res, next) => {
     pageTitle: "Add Product",
     path: "/admin/add-product",
     editing: false,
+    hasError: false,
+    errorMessage: null,
+    validationErrors: [],
   });
 };
 
@@ -13,7 +18,28 @@ exports.postAddProduct = (req, res, next) => {
   const imageUrl = req.body.imageUrl;
   const price = req.body.price;
   const description = req.body.description;
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    console.log(errors.array());
+    return res.status(422).render("admin/edit-product", {
+      pageTitle: "Add Product",
+      path: "/admin/add-product",
+      editing: false,
+      hasError: true,
+      product: {
+        title: title,
+        imageUrl: imageUrl,
+        price: price,
+        description: description,
+      },
+      errorMessage: errors.array()[0].msg,
+      validationErrors: errors.array(),
+    });
+  }
+
   const product = new Product({
+    // _id: new mongoose.Types.ObjectId("656fe04de4d8ea180de66ef5"),
     title: title,
     price: price,
     description: description,
@@ -25,22 +51,26 @@ exports.postAddProduct = (req, res, next) => {
     .save()
     .then((result) => {
       console.log("Created Product");
-      return res.redirect("/admin/products");
+      res.redirect("/admin/products");
     })
     .catch((err) => {
-      console.log(err);
+      const error = new Error(err);
+      error.httpStatusCode = 500;
+      return next(error);
     });
 };
 
 exports.postDeleteProduct = (req, res, next) => {
   const prodId = req.body.productId;
 
-  Product.findByIdAndDelete(prodId)
+  Product.deleteOne({ _id: prodId, userId: req.user._id })
     .then((result) => {
       res.redirect("/admin/products");
     })
     .catch((err) => {
-      console.log(err);
+      const error = new Error(err);
+      error.httpStatusCode = 500;
+      return next(error);
     });
 };
 
@@ -60,10 +90,15 @@ exports.getEditProduct = (req, res, next) => {
         path: "/admin/edit-product",
         editing: editMode,
         product: product,
+        hasError: false,
+        errorMessage: null,
+        validationErrors: [],
       });
     })
     .catch((err) => {
-      console.log(err);
+      const error = new Error(err);
+      error.httpStatusCode = 500;
+      return next(error);
     });
 };
 
@@ -73,37 +108,58 @@ exports.postEditProduct = (req, res, next) => {
   const updatedPrice = req.body.price;
   const updatedImageUrl = req.body.imageUrl;
   const updatedDesc = req.body.description;
+  const errors = validationResult(req);
 
-  Product.findById(prodId)
-    .then((product) => {
-      (product.title = updatedTitle),
-        (product.price = updatedPrice),
-        (product.description = updatedDesc),
-        (product.imageUrl = updatedImageUrl);
-      return product.save();
-    })
-    .then((result) => {
-      console.log("Updated Product");
-      res.redirect("/admin/products");
-    })
-    .catch((err) => {
-      console.log(err);
+  if (!errors.isEmpty()) {
+    return res.status(422).render("admin/edit-product", {
+      pageTitle: "Edit Product",
+      path: "/admin/edit-product",
+      editing: true,
+      hasError: true,
+      product: {
+        title: updatedTitle,
+        imageUrl: updatedPrice,
+        price: updatedDesc,
+        description: updatedImageUrl,
+        _id: prodId,
+      },
+      errorMessage: errors.array()[0].msg,
+      validationErrors: errors.array(),
     });
+  }
+
+  Product.findById(prodId).then((product) => {
+    if (product.userId.toString() !== req.user._id.toString()) {
+      return res.redirect("/");
+    }
+    product.title = updatedTitle;
+    product.price = updatedPrice;
+    product.description = updatedDesc;
+    product.imageUrl = updatedImageUrl;
+    return product.save().then((result) => {
+      console.log("UPDATED PRODUCT!");
+      res.redirect("/admin/products");
+    });
+  });
+  const error = new Error(err);
+  error.httpStatusCode = 500;
+  return next(error);
 };
 
 exports.getProducts = (req, res, next) => {
   Product.find()
-    .select("title price -_id")
-    .populate("userId", "email")
     .then((products) => {
       console.log(products);
       res.render("admin/products", {
         prods: products,
         pageTitle: "Admin Products",
         path: "/admin/products",
+        validationErrors: [],
       });
     })
     .catch((err) => {
-      console.log(err);
+      const error = new Error(err);
+      error.httpStatusCode = 500;
+      return next(error);
     });
 };
